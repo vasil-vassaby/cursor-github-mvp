@@ -5,6 +5,7 @@ from typing import Literal
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from openai import OpenAI
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 
@@ -198,6 +199,81 @@ def _is_real_api_configured() -> bool:
     return bool(api_key)
 
 
+def _get_openai_client() -> OpenAI:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        msg = "OPENAI_API_KEY is not configured."
+        raise RuntimeError(msg)
+
+    base_url = os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+
+    timeout_env = os.getenv("OPENAI_TIMEOUT_SECONDS")
+    timeout = 30.0
+    if timeout_env:
+        try:
+            timeout = float(timeout_env)
+        except ValueError:
+            logger.warning(
+                "Invalid OPENAI_TIMEOUT_SECONDS value. "
+                "Fallback to default 30 seconds.",
+            )
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        timeout=timeout,
+    )
+    return client
+
+
+def _get_openai_model() -> str:
+    return os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
+
+
+def _get_openai_temperature() -> float:
+    temperature_env = os.getenv("OPENAI_TEMPERATURE")
+    if not temperature_env:
+        return 0.7
+    try:
+        return float(temperature_env)
+    except ValueError:
+        logger.warning(
+            "Invalid OPENAI_TEMPERATURE value. Fallback to default 0.7.",
+        )
+        return 0.7
+
+
+def generate_with_openai(prompt: str) -> str:
+    client = _get_openai_client()
+    model = _get_openai_model()
+    temperature = _get_openai_temperature()
+
+    system_prompt = (
+        "Ты помогаешь экспертам по здоровью, телесным практикам и ТКМ "
+        "писать бережные, понятные тексты. Не ставь диагнозы, не давай "
+        "гарантий излечения и не обещай чудесных результатов. Напоминай, "
+        "что текст не заменяет консультацию врача и диагностику, но делай "
+        "это мягко, без запугивания."
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            temperature=temperature,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("OpenAI chat completion failed: %s", exc)
+        raise
+
+    choice = response.choices[0]
+    content = choice.message.content or ""
+    return content
+
+
 @app.post("/generate", response_model=GenerateResponse)
 async def generate(payload: GenerateRequest) -> GenerateResponse:
     try:
@@ -206,13 +282,20 @@ async def generate(payload: GenerateRequest) -> GenerateResponse:
         logger.info("Validation error on /generate request.")
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
-    if _is_real_api_configured():
-        logger.info(
-            "OPENAI_API_KEY найден. Используется mock-ответ. "
-            "Реальная интеграция с API может быть добавлена "
-            "в отдельной feature-ветке.",
+    if not _is_real_api_configured():
+        result_text = _build_mock_result(payload)
+        return GenerateResponse(result=result_text)
+
+    try:
+        ai_text = generate_with_openai(payload.prompt)
+        return GenerateResponse(result=ai_text)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Falling back to mock result after AI provider error.",
         )
-
-    result_text = _build_mock_result(payload)
-
-    return GenerateResponse(result=result_text)
+        mock_text = _build_mock_result(payload)
+        prefix = (
+            "(!) Не удалось получить ответ от AI‑провайдера, ниже "
+            "приведён mock‑черновик на основе ваших данных.\n\n"
+        )
+        return GenerateResponse(result=f"{prefix}{mock_text}")
