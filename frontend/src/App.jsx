@@ -44,8 +44,16 @@ export function App() {
 
                 if (contentType.includes("application/json")) {
                     const data = await response.json();
+                    if (Array.isArray(data.detail)) {
+                        throw new Error(
+                            "Некоторые поля заполнены некорректно. " +
+                                "Проверьте, что форма заполнена верно.",
+                        );
+                    }
                     throw new Error(
-                        data.detail || "Не удалось сгенерировать текст.",
+                        typeof data.detail === "string"
+                            ? data.detail
+                            : "Не удалось сгенерировать текст.",
                     );
                 }
 
@@ -74,6 +82,19 @@ export function App() {
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const handleReset = () => {
+        setResult("");
+        setError("");
+        setDebugPrompt("");
+        setShowDebug(false);
+        setCopied(false);
+    };
+
+    const handleClearResult = () => {
+        setResult("");
+        setCopied(false);
+    };
+
     return (
         <div className="page">
             <header className="page-header">
@@ -86,7 +107,7 @@ export function App() {
 
             <main className="layout">
                 <div className="layout-main">
-                    <CopyForm onSubmit={handleSubmit} />
+                    <CopyForm onSubmit={handleSubmit} onReset={handleReset} />
                 </div>
                 <div className="layout-side">
                     <ResultPanel
@@ -97,6 +118,7 @@ export function App() {
                         onCopy={handleCopy}
                         showDebug={showDebug}
                         debugPrompt={debugPrompt}
+                        onClear={handleClearResult}
                     />
                     {copied && (
                         <p className="hint">

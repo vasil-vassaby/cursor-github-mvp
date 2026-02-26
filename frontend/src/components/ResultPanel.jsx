@@ -6,6 +6,7 @@ export function ResultPanel({
     onCopy,
     showDebug,
     debugPrompt,
+    onClear,
 }) {
     const handleCopyResult = () => {
         if (!result) {
@@ -18,6 +19,12 @@ export function ResultPanel({
                 // Ошибку копирования не пробрасываем вверх, чтобы не
                 // ломать UX, можно при желании добавить отдельное сообщение.
             });
+    };
+
+    const handleClear = () => {
+        if (onClear) {
+            onClear();
+        }
     };
 
     const handleCopyPrompt = () => {
@@ -42,14 +49,24 @@ export function ResultPanel({
                 placeholder="Здесь появится черновик текста. Вы сможете отредактировать его под себя."
             />
 
-            <button
-                type="button"
-                className="secondary-button"
-                onClick={handleCopyResult}
-                disabled={!result}
-            >
-                Копировать текст
-            </button>
+            <div className="result-actions">
+                <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleCopyResult}
+                    disabled={!result}
+                >
+                    Копировать текст
+                </button>
+                <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={handleClear}
+                    disabled={!result}
+                >
+                    Очистить текст
+                </button>
+            </div>
 
             {showDebug && (
                 <div className="debug-block">

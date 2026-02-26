@@ -11,7 +11,7 @@ const INITIAL_STATE = {
     debug: false,
 };
 
-export function CopyForm({ onSubmit }) {
+export function CopyForm({ onSubmit, onReset }) {
     const [form, setForm] = useState(INITIAL_STATE);
     const [touched, setTouched] = useState({});
 
@@ -75,6 +75,14 @@ export function CopyForm({ onSubmit }) {
             prompt,
             debug: form.debug,
         });
+    };
+
+    const handleReset = () => {
+        setForm(INITIAL_STATE);
+        setTouched({});
+        if (onReset) {
+            onReset();
+        }
     };
 
     return (
@@ -183,13 +191,28 @@ export function CopyForm({ onSubmit }) {
                 <span>Показать промпт (debug mode)</span>
             </label>
 
-            <button
-                type="submit"
-                className="primary-button"
-                disabled={!isValid}
-            >
-                Сгенерировать
-            </button>
+            <div className="form-actions">
+                <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={!isValid}
+                >
+                    Сгенерировать
+                </button>
+                <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={handleReset}
+                >
+                    Очистить форму
+                </button>
+            </div>
+            {!isValid && (
+                <p className="error-text form-error">
+                    Заполните все обязательные поля, чтобы запустить
+                    генерацию текста.
+                </p>
+            )}
         </form>
     );
 }
